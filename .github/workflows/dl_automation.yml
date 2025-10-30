@@ -12,7 +12,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup PowerShell Core
-        uses: actions/setup-powershell@v4
+        uses: PowerShell/setup-powershell@v4
 
       - name: Run DL automation script
         shell: pwsh
