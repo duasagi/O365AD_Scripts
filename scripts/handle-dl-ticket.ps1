@@ -6,27 +6,22 @@ param(
     [string]$NewOwner_EmailAddress
 )
 
-# ======== Global Preferences ========
-$ErrorActionPreference = "Stop"
-$VerbosePreference = "Continue"
-$InformationPreference = "Continue"
-
-Write-Output "🚀 Script started at $(Get-Date)"
-
 # ======== Read Configuration from GitHub Secrets ========
-$certBase64       = $env:CERT_BASE64
+$certBase64 = $env:CERT_BASE64
 $pfxPasswordPlain = $env:CERT_PASSWORD
-$appId            = $env:APP_ID
-$tenantId         = $env:TENANT_ID
-$organization     = $env:ORGANIZATION
+$appId = $env:APP_ID
+$tenantId = $env:TENANT_ID
+$organization = $env:ORGANIZATION
 
 # ======== Decode and Load Certificate ========
 try {
-    Write-Output "🔐 Loading certificate from GitHub secret..."
+    Write-Host "🔐 Loading certificate from GitHub secret..."
     $tempPfxPath = Join-Path $env:GITHUB_WORKSPACE "temp_cert.pfx"
+
     [System.IO.File]::WriteAllBytes($tempPfxPath, [Convert]::FromBase64String($certBase64))
     $pfxPassword = ConvertTo-SecureString -String $pfxPasswordPlain -AsPlainText -Force
 
+    # ✅ Use constructor (immutable safe)
     $cert = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new(
         $tempPfxPath,
         $pfxPassword,
@@ -34,28 +29,23 @@ try {
     )
 
     $certThumbprint = $cert.Thumbprint
-    Write-Output "✅ Loaded certificate with thumbprint: $certThumbprint"
+    Write-Host "✅ Loaded certificate with thumbprint: $certThumbprint"
 }
 catch {
-    Write-Output "❌ Failed to load certificate: $_"
+    Write-Host "❌ Failed to load certificate: $_"
     exit 1
 }
 
 # ======== Connect to Exchange Online ========
 $connectionStatus = "Failed"
 try {
-    Write-Output "🔗 Connecting to Exchange Online..."
-    Connect-ExchangeOnline `
-        -AppId $appId `
-        -CertificateThumbprint $certThumbprint `
-        -Organization $organization `
-        -ShowBanner:$false -ErrorAction Stop
-
+    Write-Host "🔗 Connecting to Exchange Online..."
+    Connect-ExchangeOnline -AppId $appId -CertificateThumbprint $certThumbprint -Organization $organization -ShowBanner:$false -ErrorAction Stop
     $connectionStatus = "Success"
-    Write-Output "✅ Connected to Exchange Online"
+    Write-Host "✅ Successfully connected to Exchange Online"
 }
 catch {
-    Write-Output "❌ Connection failed: $_"
+    Write-Host "❌ Connection to Exchange Online failed: $_"
     exit 1
 }
 
@@ -72,22 +62,25 @@ $anyOwnerFailed = $false
 # ======== Check if Group Exists ========
 try {
     $existingGroup = Get-DistributionGroup -Identity $DistributionGroupName -ErrorAction Stop
-    Write-Output "ℹ️ Group already exists: $DistributionGroupName"
-    $distributionGroupStatusMessage = "Group already exists. Owners will be updated if valid."
+    Write-Host "ℹ️ Group already exists: $DistributionGroupName"
+    $operationStatus = "Failed"
+    $distributionGroupStatusMessage = "Group already exists."
 }
 catch {
-    Write-Output "🆕 Creating new distribution group: $DistributionGroupName"
+    Write-Host "🆕 Creating new distribution group: $DistributionGroupName"
     try {
-        New-DistributionGroup -Name $DistributionGroupName `
+        $createdl = New-DistributionGroup `
+            -Name $DistributionGroupName `
             -PrimarySmtpAddress "$DistributionGroupNamePSTN$validDomain" `
             -Alias $DistributionGroupNamePSTN `
-            -Type Distribution -ErrorAction Stop | Out-Null
+            -Type Distribution `
+            -ErrorAction Stop
 
-        $distributionGroupStatusMessage = "Successfully created distribution group."
-        Write-Output "✅ Created distribution group."
+        Write-Host "✅ Created new distribution group."
+        $distributionGroupStatusMessage = "Successfully created distribution group $DistributionGroupName."
     }
     catch {
-        Write-Output "❌ Failed to create distribution group: $_"
+        Write-Host "❌ Failed to create distribution group: $_"
         exit 1
     }
 }
@@ -98,16 +91,16 @@ foreach ($owner in $OwnersArray) {
         try {
             $recipient = Get-Recipient -Identity $owner -ErrorAction Stop
             Set-DistributionGroup -Identity $DistributionGroupName -ManagedBy @{Add = $owner} -ErrorAction Stop
-            Write-Output "✅ Added $owner as owner."
+            Write-Host "✅ Added $owner as owner."
             $anyOwnerAdded = $true
         }
         catch {
-            Write-Output "❌ Failed to add $owner as owner: $_"
+            Write-Host "❌ Failed to add $owner as owner: $_"
             $anyOwnerFailed = $true
         }
     }
     else {
-        Write-Output "⚠️ $owner does not belong to valid domain ($validDomain)."
+        Write-Host "⚠️ $owner is not part of the valid domain ($validDomain)."
         $anyOwnerFailed = $true
     }
 }
@@ -129,13 +122,6 @@ $output = [ordered]@{
     Message           = $distributionGroupStatusMessage
 }
 
-Write-Output "`n===== Summary ====="
-$output | Format-List | Out-String | Write-Output
-
-# Write JSON to console + GitHub summary
-$outputJson = $output | ConvertTo-Json -Depth 3
-Write-Output "`n📦 JSON Output:"
-Write-Output $outputJson
-$outputJson | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
-
-Write-Output "🏁 Script completed successfully."
+Write-Host "`n===== Summary ====="
+$output | Format-List
+$output | ConvertTo-Json -Depth 3
