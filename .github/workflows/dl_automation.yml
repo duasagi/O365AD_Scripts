@@ -9,10 +9,11 @@ jobs:
     runs-on: windows-latest
 
     steps:
+      # Step 1️⃣ - Checkout Repository
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # ✅ Install and Import ExchangeOnlineManagement Module
+      # Step 2️⃣ - Install Exchange Online PowerShell Module
       - name: Install ExchangeOnlineManagement module
         shell: pwsh
         run: |
@@ -21,7 +22,7 @@ jobs:
           Import-Module ExchangeOnlineManagement
           Write-Host "✅ ExchangeOnlineManagement module installed and imported."
 
-      # ✅ Run DL automation PowerShell script
+      # Step 3️⃣ - Run DL Automation Script
       - name: Run DL automation script
         shell: pwsh
         env:
@@ -32,3 +33,16 @@ jobs:
           TENANT_ID: ${{ secrets.TENANT_ID }}
           ORGANIZATION: ${{ secrets.ORGANIZATION }}
         run: |
+          Write-Host "🎯 Received Payload:"
+          Write-Host "📂 Distribution Group: ${{ github.event.client_payload.DistributionGroupName }}"
+          Write-Host "👤 New Owner: ${{ github.event.client_payload.NewOwner_EmailAddress }}"
+
+          # Capture payload variables
+          $dgName = "${{ github.event.client_payload.DistributionGroupName }}"
+          $owners = "${{ github.event.client_payload.NewOwner_EmailAddress }}"
+
+          # Run the PowerShell automation script
+          Write-Host "🚀 Executing DL Automation script..."
+          pwsh ./scripts/handle-dl-ticket.ps1 `
+            -DistributionGroupName $dgName `
+            -NewOwner_EmailAddress $owners
