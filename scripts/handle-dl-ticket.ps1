@@ -77,6 +77,11 @@ catch {
             -PrimarySmtpAddress "$DistributionGroupNamePSTN$validDomain" `
             -Alias $DistributionGroupNamePSTN -Type Distribution -ErrorAction Stop
 
+write-Host "New-DistributionGroup -Name $DistributionGroupName `
+            -PrimarySmtpAddress "$DistributionGroupNamePSTN$validDomain" `
+            -Alias $DistributionGroupNamePSTN -Type Distribution -ErrorAction Stop"
+
+
         $distributionGroupStatusMessage = "Successfully created distribution group $DistributionGroupName."
         Write-Host "✅ Created new distribution group."
     }
