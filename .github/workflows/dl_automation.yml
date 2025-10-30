@@ -17,9 +17,10 @@ jobs:
       - name: Run DL automation script
         shell: pwsh
         env:
-          AZURE_CERT_BASE64: ${{ secrets.AZURE_CERT_BASE64 }}
+          AZURE_CERT_BASE64: ${{ secrets.CERT_BASE64 }}
           CERT_PASSWORD: ${{ secrets.CERT_PASSWORD }}
           APP_ID: ${{ secrets.APP_ID }}
+          CERT_THUMBPRINT: ${{ secrets.CERT_THUMBPRINT }}
           TENANT_ID: ${{ secrets.TENANT_ID }}
           ORGANIZATION: ${{ secrets.ORGANIZATION }}
         run: |
