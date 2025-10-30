@@ -42,7 +42,7 @@ Connect-ExchangeOnline -AppId $AppId -CertificateThumbprint $Thumbprint -Organiz
 
 # Example actions — list first 10 distribution groups
 Write-Host "Listing top 10 distribution groups..."
-Get-DistributionGroup -ResultSize 10 | Select DisplayName, PrimarySmtpAddress | Format-Table -AutoSize
+Get-DistributionGroup -ResultSize 50 | Select DisplayName, PrimarySmtpAddress | Format-Table -AutoSize
 
 # Example: add member to a distribution group (uncomment and edit to use)
 # Add-DistributionGroupMember -Identity "DL-Example@yourdomain.com" -Member "user@yourdomain.com"
