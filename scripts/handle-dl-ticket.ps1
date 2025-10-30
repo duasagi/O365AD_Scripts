@@ -7,11 +7,12 @@ param(
 )
 
 # ======== Read Configuration from GitHub Secrets ========
-$certBase64 = $env:AZURE_CERT_BASE64
+$certBase64 = $env:CERT_BASE64
 $pfxPasswordPlain = $env:CERT_PASSWORD
 $appId = $env:APP_ID
 $tenantId = $env:TENANT_ID
 $organization = $env:ORGANIZATION
+$certThumbprint = $env:
 
 # ======== Decode and Load Certificate ========
 $tempPfxPath = Join-Path $env:GITHUB_WORKSPACE "temp_cert.pfx"
