@@ -14,7 +14,7 @@ jobs:
       - name: Run DL automation script
         shell: pwsh
         env:
-          AZURE_CERT_BASE64: ${{ secrets.CERT_BASE64 }}
+          CERT_BASE64: ${{ secrets.CERT_BASE64 }}
           CERT_PASSWORD: ${{ secrets.CERT_PASSWORD }}
           APP_ID: ${{ secrets.APP_ID }}
           CERT_THUMBPRINT: ${{ secrets.CERT_THUMBPRINT }}
@@ -30,3 +30,7 @@ jobs:
           ./scripts/handle-dl-ticket.ps1 `
             -DistributionGroupName $dgName `
             -NewOwner_EmailAddress $owners
+
+
+
+            
