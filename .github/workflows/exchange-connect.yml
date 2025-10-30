@@ -11,12 +11,18 @@ jobs:
     runs-on: windows-latest
 
     steps:
-      - name: Checkout repo
+      - name: Checkout repository
         uses: actions/checkout@v4
 
+      # ✅ Show PowerShell version (correct syntax)
       - name: Show PowerShell version
         run: pwsh -NoLogo -Command "$PSVersionTable.PSVersion"
 
+      # ✅ (Optional) Install ExchangeOnlineManagement module
+      - name: Install Exchange Online PowerShell module
+        run: pwsh -Command "Install-Module ExchangeOnlineManagement -Force -AllowClobber -Scope CurrentUser"
+
+      # ✅ Run your PowerShell script with certificate details
       - name: Run Exchange connection script
         shell: pwsh
         env:
@@ -26,7 +32,7 @@ jobs:
           CERT_BASE64: ${{ secrets.CERT_BASE64 }}
           CERT_PASSWORD: ${{ secrets.CERT_PASSWORD }}
         run: |
-          ./exchange-connect.ps1 `
+          pwsh ./exchange-connect.ps1 `
             -AppId $env:APP_ID `
             -TenantId $env:TENANT_ID `
             -Thumbprint $env:CERT_THUMBPRINT `
