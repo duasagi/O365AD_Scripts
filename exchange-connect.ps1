@@ -3,7 +3,8 @@ param(
     [Parameter(Mandatory=$true)][string]$TenantId,
     [Parameter(Mandatory=$true)][string]$Thumbprint,
     [Parameter(Mandatory=$true)][string]$CertBase64,
-    [Parameter(Mandatory=$true)][string]$CertPassword
+    [Parameter(Mandatory=$true)][string]$CertPassword,
+    [Parameter(Mandatory=$true)][string]$Organization
 )
 
 # --- Decode and write PFX to temp ---
@@ -36,7 +37,8 @@ if (-not (Get-Module -ListAvailable -Name ExchangeOnlineManagement)) {
 
 # --- Connect using certificate thumbprint as app-only authentication ---
 Write-Host "Connecting to Exchange Online using application certificate..."
-Connect-ExchangeOnline -AppId $AppId -CertificateThumbprint $Thumbprint -Organization $TenantId -ShowBanner:$false
+#Connect-ExchangeOnline -AppId $AppId -CertificateThumbprint $Thumbprint -Organization $Organization -ShowBanner:$false
+Connect-ExchangeOnline -AppId $AppId -CertificateThumbprint $Thumbprint -Organization $Organization -ShowBanner:$false
 
 # Example actions — list first 10 distribution groups
 Write-Host "Listing top 10 distribution groups..."
