@@ -11,13 +11,13 @@ jobs:
     runs-on: windows-latest
 
     steps:
-      - name: Checkout repository
+      - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Setup PowerShell
-        uses: PowerShell/setup-powershell@v2
+      - name: Show PowerShell version
+        run: pwsh -NoLogo -Command "$PSVersionTable.PSVersion"
 
-      - name: Connect to Exchange Online using Certificate
+      - name: Run Exchange connection script
         shell: pwsh
         env:
           APP_ID: ${{ secrets.APP_ID }}
@@ -26,11 +26,7 @@ jobs:
           CERT_BASE64: ${{ secrets.CERT_BASE64 }}
           CERT_PASSWORD: ${{ secrets.CERT_PASSWORD }}
         run: |
-          # Display PowerShell version (for debugging)
-          Write-Host "PowerShell version:" $PSVersionTable.PSVersion
-
-          # Run the PowerShell script
-          .\exchange-connect.ps1 `
+          ./exchange-connect.ps1 `
             -AppId $env:APP_ID `
             -TenantId $env:TENANT_ID `
             -Thumbprint $env:CERT_THUMBPRINT `
