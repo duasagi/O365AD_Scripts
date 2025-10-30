@@ -14,17 +14,22 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # ✅ Show PowerShell version (correct syntax)
+      # ✅ Show PowerShell version safely
       - name: Show PowerShell version
-        run: pwsh -NoLogo -Command "$PSVersionTable.PSVersion"
+        shell: powershell
+        run: |
+          Write-Host "PowerShell version:"
+          $PSVersionTable.PSVersion
 
-      # ✅ (Optional) Install ExchangeOnlineManagement module
+      # ✅ (Optional) Install Exchange Online module
       - name: Install Exchange Online PowerShell module
-        run: pwsh -Command "Install-Module ExchangeOnlineManagement -Force -AllowClobber -Scope CurrentUser"
+        shell: powershell
+        run: |
+          Install-Module ExchangeOnlineManagement -Force -AllowClobber -Scope CurrentUser
 
-      # ✅ Run your PowerShell script with certificate details
+      # ✅ Run your connection script
       - name: Run Exchange connection script
-        shell: pwsh
+        shell: powershell
         env:
           APP_ID: ${{ secrets.APP_ID }}
           TENANT_ID: ${{ secrets.TENANT_ID }}
@@ -32,7 +37,8 @@ jobs:
           CERT_BASE64: ${{ secrets.CERT_BASE64 }}
           CERT_PASSWORD: ${{ secrets.CERT_PASSWORD }}
         run: |
-          pwsh ./exchange-connect.ps1 `
+          Write-Host "Starting Exchange connection script..."
+          ./exchange-connect.ps1 `
             -AppId $env:APP_ID `
             -TenantId $env:TENANT_ID `
             -Thumbprint $env:CERT_THUMBPRINT `
