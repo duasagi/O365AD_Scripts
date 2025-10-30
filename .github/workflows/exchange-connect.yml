@@ -36,6 +36,7 @@ jobs:
           CERT_THUMBPRINT: ${{ secrets.CERT_THUMBPRINT }}
           CERT_BASE64: ${{ secrets.CERT_BASE64 }}
           CERT_PASSWORD: ${{ secrets.CERT_PASSWORD }}
+          ORGANIZATION: ${{ secrets.ORGANIZATION }}
         run: |
           Write-Host "Starting Exchange connection script..."
           ./exchange-connect.ps1 `
@@ -43,4 +44,5 @@ jobs:
             -TenantId $env:TENANT_ID `
             -Thumbprint $env:CERT_THUMBPRINT `
             -CertBase64 $env:CERT_BASE64 `
-            -CertPassword $env:CERT_PASSWORD
+            -CertPassword $env:CERT_PASSWORD `
+            -Organization $env:ORGANIZATION
