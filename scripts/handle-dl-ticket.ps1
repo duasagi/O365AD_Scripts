@@ -12,7 +12,7 @@ $pfxPasswordPlain = $env:CERT_PASSWORD
 $appId = $env:APP_ID
 $tenantId = $env:TENANT_ID
 $organization = $env:ORGANIZATION
-$certThumbprint = $env:
+$certThumbprint = $env:CERT_THUMBPRINT
 
 # ======== Decode and Load Certificate ========
 $tempPfxPath = Join-Path $env:GITHUB_WORKSPACE "temp_cert.pfx"
