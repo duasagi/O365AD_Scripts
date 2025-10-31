@@ -7,42 +7,51 @@ param(
 )
 
 # ======== Read Configuration from GitHub Secrets ========
-$certBase64 = $env:CERT_BASE64
-$pfxPasswordPlain = $env:CERT_PASSWORD
-$appId = $env:APP_ID
-$tenantId = $env:TENANT_ID
-$organization = $env:ORGANIZATION
+$certBase64    = $env:CERT_BASE64
+$pfxPassword   = $env:CERT_PASSWORD
+$appId         = $env:APP_ID
+$tenantId      = $env:TENANT_ID
+$organization  = $env:ORGANIZATION
 
-# ======== Decode and Load Certificate ========
+# ======== Decode and Import Certificate to Store ========
 try {
     Write-Host "🔐 Loading certificate from GitHub secret..."
-    $tempPfxPath = Join-Path $env:GITHUB_WORKSPACE "temp_cert.pfx"
+    $tempPfxPath = Join-Path $env:TEMP "exchange_cert.pfx"
 
     [System.IO.File]::WriteAllBytes($tempPfxPath, [Convert]::FromBase64String($certBase64))
-    $pfxPassword = ConvertTo-SecureString -String $pfxPasswordPlain -AsPlainText -Force
+    $securePwd = ConvertTo-SecureString -String $pfxPassword -AsPlainText -Force
 
-    # ✅ Use constructor (immutable safe)
-    $cert = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new(
-        $tempPfxPath,
-        $pfxPassword,
-        [System.Security.Cryptography.X509Certificates.X509KeyStorageFlags]::Exportable
-    )
+    # Remove any existing cert with same thumbprint (avoid duplicates)
+    $tempCert = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2($tempPfxPath, $securePwd)
+    $thumb = $tempCert.Thumbprint
+    $existing = Get-ChildItem Cert:\CurrentUser\My | Where-Object Thumbprint -eq $thumb
+    if ($existing) {
+        Write-Host "⚠️ Removing existing certificate with same thumbprint..."
+        $existing | Remove-Item -Force
+    }
 
-    $certThumbprint = $cert.Thumbprint
-    Write-Host "✅ Loaded certificate with thumbprint: $certThumbprint"
+    Write-Host "📥 Importing certificate into Cert:\CurrentUser\My ..."
+    Import-PfxCertificate -FilePath $tempPfxPath -CertStoreLocation Cert:\CurrentUser\My -Password $securePwd | Out-Null
+    Write-Host "✅ Imported certificate with thumbprint: $thumb"
 }
 catch {
-    Write-Host "❌ Failed to load certificate: $_"
+    Write-Host "❌ Failed to load/import certificate: $_"
     exit 1
+}
+
+# ======== Ensure ExchangeOnlineManagement Module ========
+if (-not (Get-Module -ListAvailable -Name ExchangeOnlineManagement)) {
+    Write-Host "📦 Installing ExchangeOnlineManagement..."
+    Install-Module ExchangeOnlineManagement -Force -AllowClobber -Scope CurrentUser
 }
 
 # ======== Connect to Exchange Online ========
 $connectionStatus = "Failed"
 try {
     Write-Host "🔗 Connecting to Exchange Online..."
-    Connect-ExchangeOnline -AppId $appId -CertificateThumbprint $certThumbprint -Organization $organization -ShowBanner:$false -ErrorAction Stop
-    $connectionStatus = "Success"
+    Connect-ExchangeOnline -AppId $appId -CertificateThumbprint $thumb -Organization $organization -ShowBanner:$false -ErrorAction Stop
     Write-Host "✅ Successfully connected to Exchange Online"
+    $connectionStatus = "Success"
 }
 catch {
     Write-Host "❌ Connection to Exchange Online failed: $_"
@@ -69,12 +78,12 @@ try {
 catch {
     Write-Host "🆕 Creating new distribution group: $DistributionGroupName"
     try {
-        $createdl = New-DistributionGroup `
+        New-DistributionGroup `
             -Name $DistributionGroupName `
             -PrimarySmtpAddress "$DistributionGroupNamePSTN$validDomain" `
             -Alias $DistributionGroupNamePSTN `
             -Type Distribution `
-            -ErrorAction Stop
+            -ErrorAction Stop | Out-Null
 
         Write-Host "✅ Created new distribution group."
         $distributionGroupStatusMessage = "Successfully created distribution group $DistributionGroupName."
@@ -125,3 +134,7 @@ $output = [ordered]@{
 Write-Host "`n===== Summary ====="
 $output | Format-List
 $output | ConvertTo-Json -Depth 3
+
+# ======== Cleanup ========
+Disconnect-ExchangeOnline -Confirm:$false
+Write-Host "🔒 Disconnected from Exchange Online."
