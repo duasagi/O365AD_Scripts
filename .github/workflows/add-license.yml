@@ -24,9 +24,9 @@ jobs:
       - name: Run Add License Script
         shell: pwsh
         env:
-          TENANT_ID: ${{ secrets.TENANT_ID }}
-          CLIENT_ID: ${{ secrets.CLIENT_ID }}
-          CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
+          TENANT_ID: ${{ secrets.TENANT_ID_NEW }}
+          CLIENT_ID: ${{ secrets.CLIENT_ID_NEW }}
+          CLIENT_SECRET: ${{ secrets.CLIENT_SECRET_NEW }}
         run: |
           # Fetch UPN & SKU — Works for BOTH triggers
           $upn = if ("${{ github.event.inputs.userPrincipalName }}" -ne "") {
