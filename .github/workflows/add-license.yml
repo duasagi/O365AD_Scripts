@@ -1,6 +1,15 @@
 name: Add M365 License Trigger
 
 on:
+  workflow_dispatch:
+    inputs:
+      userPrincipalName:
+        description: "UserPrincipalName"
+        required: true
+      licenseSku:
+        description: "License SKU ID"
+        required: true
+
   repository_dispatch:
     types: [assign_license]
 
@@ -19,14 +28,21 @@ jobs:
           CLIENT_ID: ${{ secrets.CLIENT_ID }}
           CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
         run: |
-          Write-Host "🟢 Received Payload:"
-          Write-Host "   UserPrincipalName:  ${{ github.event.client_payload.UserPrincipalName }}"
-          Write-Host "   LicenseSkuId:       ${{ github.event.client_payload.LicenseSkuId }}"
-          
-          $upn = "${{ github.event.client_payload.UserPrincipalName }}"
-          $sku = "${{ github.event.client_payload.LicenseSkuId }}"
+          # Fetch UPN & SKU — Works for BOTH triggers
+          $upn = if ("${{ github.event.inputs.userPrincipalName }}" -ne "") {
+              "${{ github.event.inputs.userPrincipalName }}"
+          } else {
+              "${{ github.event.client_payload.UserPrincipalName }}"
+          }
 
-          Write-Host "🚀 Running add-license.ps1..."
+          $sku = if ("${{ github.event.inputs.licenseSku }}" -ne "") {
+              "${{ github.event.inputs.licenseSku }}"
+          } else {
+              "${{ github.event.client_payload.LicenseSkuId }}"
+          }
+
+          Write-Host "🟢 Final UserPrincipalName: $upn"
+          Write-Host "🟢 Final LicenseSkuId: $sku"
 
           pwsh "$env:GITHUB_WORKSPACE/add-license.ps1" `
             -TenantId $env:TENANT_ID `
