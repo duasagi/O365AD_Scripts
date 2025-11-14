@@ -1,0 +1,80 @@
+name: M365 License Automation
+
+on:
+  workflow_dispatch:
+    inputs:
+      actionType:
+        description: "Select action: add OR remove"
+        required: true
+      userPrincipalName:
+        description: "UserPrincipalName"
+        required: true
+      licenseSku:
+        description: "License SKU ID"
+        required: true
+
+  repository_dispatch:
+    types: [license_event]
+
+jobs:
+  run-license-automation:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run Add/Remove License Script
+        shell: pwsh
+        env:
+          TENANT_ID: ${{ secrets.TENANT_ID_NEW }}
+          CLIENT_ID: ${{ secrets.CLIENT_ID_NEW }}
+          CLIENT_SECRET: ${{ secrets.CLIENT_SECRET_NEW }}
+        run: |
+          # Extract Action
+          $action = if ("${{ github.event.inputs.actionType }}" -ne "") {
+              "${{ github.event.inputs.actionType }}"
+          } else {
+              "${{ github.event.client_payload.ActionType }}"
+          }
+
+          # Extract UPN
+          $upn = if ("${{ github.event.inputs.userPrincipalName }}" -ne "") {
+              "${{ github.event.inputs.userPrincipalName }}"
+          } else {
+              "${{ github.event.client_payload.UserPrincipalName }}"
+          }
+
+          # Extract SKU
+          $sku = if ("${{ github.event.inputs.licenseSku }}" -ne "") {
+              "${{ github.event.inputs.licenseSku }}"
+          } else {
+              "${{ github.event.client_payload.LicenseSkuId }}"
+          }
+
+          Write-Host "🟢 Action: $action"
+          Write-Host "🟢 UserPrincipalName: $upn"
+          Write-Host "🟢 LicenseSkuId: $sku"
+
+          if ($action -eq "add") {
+              Write-Host "🚀 Running add-license.ps1"
+              pwsh "$env:GITHUB_WORKSPACE/scripts/add-license.ps1" `
+                -TenantId $env:TENANT_ID `
+                -ClientId $env:CLIENT_ID `
+                -ClientSecret $env:CLIENT_SECRET `
+                -UserPrincipalName $upn `
+                -LicenseSkuId $sku
+          }
+          elseif ($action -eq "remove") {
+              Write-Host "🚀 Running remove-license.ps1"
+              pwsh "$env:GITHUB_WORKSPACE/scripts/remove-license.ps1" `
+                -TenantId $env:TENANT_ID `
+                -ClientId $env:CLIENT_ID `
+                -ClientSecret $env:CLIENT_SECRET `
+                -UserPrincipalName $upn `
+                -LicenseSkuId $sku
+          }
+          else {
+              Write-Host "❌ Invalid actionType. Use: add OR remove"
+              exit 1
+          }
