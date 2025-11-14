@@ -1,0 +1,31 @@
+name: Add Microsoft 365 License
+
+on:
+  workflow_dispatch:
+    inputs:
+      userPrincipalName:
+        description: "UserPrincipalName to assign license"
+        required: true
+        type: string
+      licenseSku:
+        description: "License SKU to assign"
+        required: true
+        type: string
+
+jobs:
+  run-script:
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v3
+
+    - name: Run PowerShell Script
+      shell: pwsh
+      run: |
+        ./add-license.ps1 `
+          -TenantId "${{ secrets.TENANT_ID }}" `
+          -ClientId "${{ secrets.CLIENT_ID }}" `
+          -ClientSecret "${{ secrets.CLIENT_SECRET }}" `
+          -UserPrincipalName "${{ github.event.inputs.userPrincipalName }}" `
+          -LicenseSkuId "${{ github.event.inputs.licenseSku }}"
