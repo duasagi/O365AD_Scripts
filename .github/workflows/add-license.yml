@@ -1,31 +1,36 @@
-name: Add Microsoft 365 License
+name: Add M365 License Trigger
 
 on:
-  workflow_dispatch:
-    inputs:
-      userPrincipalName:
-        description: "UserPrincipalName to assign license"
-        required: true
-        type: string
-      licenseSku:
-        description: "License SKU to assign"
-        required: true
-        type: string
+  repository_dispatch:
+    types: [assign_license]
 
 jobs:
-  run-script:
+  run-license-automation:
     runs-on: windows-latest
 
     steps:
-    - name: Checkout Repository
-      uses: actions/checkout@v3
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-    - name: Run PowerShell Script
-      shell: pwsh
-      run: |
-        ./add-license.ps1 `
-          -TenantId "${{ secrets.TENANT_ID }}" `
-          -ClientId "${{ secrets.CLIENT_ID }}" `
-          -ClientSecret "${{ secrets.CLIENT_SECRET }}" `
-          -UserPrincipalName "${{ github.event.inputs.userPrincipalName }}" `
-          -LicenseSkuId "${{ github.event.inputs.licenseSku }}"
+      - name: Run Add License Script
+        shell: pwsh
+        env:
+          TENANT_ID: ${{ secrets.TENANT_ID }}
+          CLIENT_ID: ${{ secrets.CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
+        run: |
+          Write-Host "🟢 Received Payload:"
+          Write-Host "   UserPrincipalName:  ${{ github.event.client_payload.UserPrincipalName }}"
+          Write-Host "   LicenseSkuId:       ${{ github.event.client_payload.LicenseSkuId }}"
+          
+          $upn = "${{ github.event.client_payload.UserPrincipalName }}"
+          $sku = "${{ github.event.client_payload.LicenseSkuId }}"
+
+          Write-Host "🚀 Running add-license.ps1..."
+
+          pwsh "$env:GITHUB_WORKSPACE/add-license.ps1" `
+            -TenantId $env:TENANT_ID `
+            -ClientId $env:CLIENT_ID `
+            -ClientSecret $env:CLIENT_SECRET `
+            -UserPrincipalName $upn `
+            -LicenseSkuId $sku
