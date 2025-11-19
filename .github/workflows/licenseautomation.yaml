@@ -56,7 +56,7 @@ jobs:
           Write-Host "🟢 UserPrincipalName: $upn"
           Write-Host "🟢 LicenseSkuId: $sku"
 
-          pwsh "$env:GITHUB_WORKSPACE/scripts/license-management.ps1" `
+          pwsh "$env:GITHUB_WORKSPACE/scripts/licensemanagement.ps1" `
             -TenantId $env:TENANT_ID `
             -ClientId $env:CLIENT_ID `
             -ClientSecret $env:CLIENT_SECRET `
