@@ -96,7 +96,7 @@ jobs:
       run: |
         Write-Host "Updating RITM to In Progress..."
         $url = "https://ven04628.service-now.com/api/now/table/sc_req_item/$($env:SYS_ID)"
-        $body = '{"state":"2"}'
+        $body = '{"state":"2","assigned_to":"cc152f591bbaf5109b7d32231b4bcbc1"}'
         $cred = New-Object System.Management.Automation.PSCredential($env:SNOW_USER,(ConvertTo-SecureString $env:SNOW_PASS -AsPlainText -Force))
         Invoke-RestMethod -Method Patch -Uri $url -Credential $cred -Headers @{ "Content-Type"="application/json" } -Body $body
 
