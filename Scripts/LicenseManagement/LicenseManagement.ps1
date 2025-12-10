@@ -7,6 +7,8 @@
 #     [string]$ActionType   # add OR remove
 # )
 
+
+
 # Write-Host "Connecting to Microsoft Graph..." -ForegroundColor Cyan
 
 # $body = @{
@@ -73,7 +75,8 @@
 # }
 
 
-
+## working one
+<#
 
 param(
     [string]$TenantId,
@@ -286,3 +289,209 @@ catch {
     Write-Host "ERRORFLAG:: True"
     return
 }
+#>
+
+param(
+    [string]$TenantId,
+    [string]$ClientId,
+    [string]$ClientSecret,
+    [string]$UserPrincipalName,
+    [string]$LicenseSkuId,
+    [string]$ActionType   # add license OR remove license
+)
+
+# Global flags
+$global:WorkNotesMessage = ""
+$global:ErrorFlag = $false
+
+function Set-Result($msg, $isError) {
+    $global:WorkNotesMessage = $msg
+    $global:ErrorFlag = $isError
+}
+
+# -----------------------------
+# Normalize ActionType
+# -----------------------------
+$ActionType = $ActionType.ToLower().Trim()
+
+if ($ActionType -eq "add license") { $actionNormalized = "add" }
+elseif ($ActionType -eq "remove license") { $actionNormalized = "remove" }
+else {
+    Set-Result "Invalid ActionType" $true
+    Write-Host "❌ ERROR: Invalid ActionType. Use 'add license' or 'remove license'." -ForegroundColor Red
+    goto END
+}
+
+# -----------------------------
+# Validate UPN Format
+# -----------------------------
+$validDomain = $env:VALID_DOMAIN
+
+if ([string]::IsNullOrWhiteSpace($validDomain)) {
+    Set-Result "VALID_DOMAIN environment variable not set" $true
+    Write-Host "❌ ERROR: VALID_DOMAIN is not set!" -ForegroundColor Red
+    goto END
+}
+
+$escapedDomain = [Regex]::Escape($validDomain)
+
+if ($UserPrincipalName -notmatch "^[a-zA-Z0-9._-]+@$escapedDomain$") {
+    Set-Result "Invalid UPN format" $true
+    Write-Host "❌ ERROR: Invalid UPN format." -ForegroundColor Red
+    goto END
+}
+
+Write-Host "✔ UPN Format Validated" -ForegroundColor Green
+
+# -----------------------------
+# Get Access Token
+# -----------------------------
+Write-Host "Connecting to Microsoft Graph..." -ForegroundColor Cyan
+
+$body = @{
+    grant_type    = "client_credentials"
+    client_id     = $ClientId
+    client_secret = $ClientSecret
+    scope         = "https://graph.microsoft.com/.default"
+}
+
+try {
+    $token = (Invoke-RestMethod -Method POST `
+        -Uri "https://login.microsoftonline.com/$TenantId/oauth2/v2.0/token" `
+        -Body $body).access_token
+}
+catch {
+    Set-Result "Failed to get access token" $true
+    Write-Host "❌ Failed to get access token." -ForegroundColor Red
+    goto END
+}
+
+$headers = @{
+    Authorization = "Bearer $token"
+    "Content-Type" = "application/json"
+}
+
+# -----------------------------
+# Get User
+# -----------------------------
+try {
+    $user = Invoke-RestMethod `
+        -Uri "https://graph.microsoft.com/v1.0/users/$UserPrincipalName" `
+        -Headers $headers `
+        -Method GET
+
+    Write-Host "✔ User Found: $($user.userPrincipalName)" -ForegroundColor Green
+}
+catch {
+    Set-Result "User not found" $true
+    Write-Host "❌ ERROR: User not found: $UserPrincipalName" -ForegroundColor Red
+    goto END
+}
+
+# -----------------------------
+# Get SKUs
+# -----------------------------
+try {
+    $tenantLicenses = Invoke-RestMethod `
+        -Uri "https://graph.microsoft.com/v1.0/subscribedSkus" `
+        -Headers $headers `
+        -Method GET
+}
+catch {
+    Set-Result "Failed to fetch subscribed SKUs" $true
+    Write-Host "❌ ERROR: Unable to fetch tenant SKUs" -ForegroundColor Red
+    goto END
+}
+
+$sku = $tenantLicenses.value | Where-Object { $_.skuId -eq $LicenseSkuId }
+
+if (-not $sku) {
+    Set-Result "License SKU not found in tenant" $true
+    Write-Host "❌ ERROR: License SKU '$LicenseSkuId' does NOT exist" -ForegroundColor Red
+    goto END
+}
+
+Write-Host "✔ License SKU exists: $LicenseSkuId" -ForegroundColor Green
+
+# -----------------------------
+# Get License Details
+# -----------------------------
+try {
+    $licenseDetails = Invoke-RestMethod `
+        -Uri "https://graph.microsoft.com/v1.0/users/$UserPrincipalName/licenseDetails" `
+        -Headers $headers `
+        -Method GET
+}
+catch {
+    Set-Result "Failed to fetch license details" $true
+    Write-Host "❌ ERROR: Unable to fetch license details." -ForegroundColor Red
+    goto END
+}
+
+$assignedSkuIds = $licenseDetails.value.skuId
+
+# -----------------------------
+# ADD LICENSE
+# -----------------------------
+if ($actionNormalized -eq "add") {
+
+    if ($assignedSkuIds -contains $LicenseSkuId) {
+        Set-Result "License already assigned" $true
+        Write-Host "⚠️ SKIP: License already assigned." -ForegroundColor Yellow
+        goto END
+    }
+
+    $availableUnits = $sku.prepaidUnits.enabled - $sku.consumedUnits
+    if ($availableUnits -le 0) {
+        Set-Result "No available license units" $true
+        Write-Host "❌ ERROR: No available units left." -ForegroundColor Red
+        goto END
+    }
+
+    $bodyJson = @{
+        addLicenses    = @(@{ skuId = $LicenseSkuId })
+        removeLicenses = @()
+    } | ConvertTo-Json -Depth 3
+}
+
+# -----------------------------
+# REMOVE LICENSE
+# -----------------------------
+if ($actionNormalized -eq "remove") {
+
+    if ($assignedSkuIds -notcontains $LicenseSkuId) {
+        Set-Result "License not assigned, nothing to remove" $true
+        Write-Host "⚠️ SKIP: License NOT assigned." -ForegroundColor Yellow
+        goto END
+    }
+
+    $bodyJson = @{
+        addLicenses    = @()
+        removeLicenses = @($LicenseSkuId)
+    } | ConvertTo-Json -Depth 3
+}
+
+# -----------------------------
+# Assign License
+# -----------------------------
+try {
+    Invoke-RestMethod `
+        -Uri "https://graph.microsoft.com/v1.0/users/$UserPrincipalName/assignLicense" `
+        -Headers $headers `
+        -Method POST `
+        -Body $bodyJson
+
+    Set-Result "License $actionNormalized operation completed successfully" $false
+    Write-Host "✅ SUCCESS: License $actionNormalized successfully!" -ForegroundColor Green
+}
+catch {
+    Set-Result "API failed: $($_.Exception.Message)" $true
+    Write-Host "❌ API failed" -ForegroundColor Red
+}
+
+# -----------------------------
+# FINAL OUTPUT (WORKNOTES + FLAG)
+# -----------------------------
+END:
+Write-Output "WORKNOTES::$global:WorkNotesMessage"
+Write-Output "ERRORFLAG::$($global:ErrorFlag)"
