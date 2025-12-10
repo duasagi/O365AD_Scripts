@@ -40,7 +40,7 @@ jobs:
       - name: Checkout O365_Automations Branch
         uses: actions/checkout@v4
         with:
-          ref: O365_Automations
+          ref: main
 
       # -------------------------------------------------
       # 3. Run License Management Script
