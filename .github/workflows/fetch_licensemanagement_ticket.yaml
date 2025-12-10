@@ -20,11 +20,10 @@ jobs:
         ASSIGNMENT_GROUP: ${{ secrets.ASSIGNMENT_GROUP_SYSID }}
       run: |
         Write-Host "Fetching latest Open RITM from ServiceNow..."
-
         $url = "https://ven04628.service-now.com/api/now/table/sc_req_item" +
-       "?sysparm_limit=1" +
-       "&sysparm_query=state=1^stage=request_approved^cat_item.name=UserLicenseManagement_GitHub^assignment_group=$($env:ASSIGNMENT_GROUP)^ORDERBYDESCsys_created_on" +
-       "&sysparm_fields=number,description,cat_item.name"
+               "?sysparm_limit=1" +
+               "&sysparm_query=state=1^stage=request_approved^cat_item.name=UserLicenseManagement_GitHub^assignment_group=$($env:ASSIGNMENT_GROUP)^ORDERBYDESCsys_created_on" +
+               "&sysparm_fields=number,description,cat_item.name"
 
         $cred = New-Object System.Management.Automation.PSCredential(
           $env:SNOW_USER,
