@@ -1,0 +1,180 @@
+name: Fetch SNOW RITM and Trigger O365 License
+
+on:
+  workflow_dispatch:
+
+jobs:
+  fetch_and_trigger:
+    runs-on: ubuntu-latest
+    steps:
+
+    # -------------------------------------------------------------
+    # 1. Fetch latest OPEN & APPROVED RITM from ServiceNow
+    # -------------------------------------------------------------
+    - name: Fetch latest Open RITM from SNOW
+      id: get_snow
+      shell: pwsh
+      env:
+        SNOW_USER: ${{ secrets.SNOW_USER }}
+        SNOW_PASS: ${{ secrets.SNOW_PASS }}
+        ASSIGNMENT_GROUP: ${{ secrets.ASSIGNMENT_GROUP_SYSID }}
+      run: |
+        Write-Host "Fetching latest Open RITM from ServiceNow..."
+
+        $url = "https://ven04628.service-now.com/api/now/table/sc_req_item" +
+               "?sysparm_limit=1" +
+               "&sysparm_query=state=1^stage=request_approved^assignment_group=$($env:ASSIGNMENT_GROUP)^ORDERBYDESCsys_created_on" +
+               "&sysparm_fields=number,description,cat_item.name"
+
+        $cred = New-Object System.Management.Automation.PSCredential(
+          $env:SNOW_USER,
+          (ConvertTo-SecureString $env:SNOW_PASS -AsPlainText -Force)
+        )
+
+        $response = Invoke-RestMethod -Uri $url -Credential $cred -Headers @{Accept="application/json"}
+
+        if (-not $response.result) {
+          Write-Host "No matching RITM found"
+          echo "ritm=" >> $env:GITHUB_OUTPUT
+          exit 0
+        }
+
+        $ritm = $response.result[0].number
+        $description = $response.result[0].description
+        $cat_item_name = $response.result[0]."cat_item.name"
+
+        Write-Host "RITM Found: $ritm"
+        Write-Host "Catalog Item: $cat_item_name"
+
+        if ($cat_item_name -ne "UserLicenseManagement_GitHub") {
+          Write-Host "RITM does not belong to UserLicenseManagement_GitHub. Skipping workflow."
+          echo "ritm=" >> $env:GITHUB_OUTPUT
+          exit 0
+        }
+
+        $encoded = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($description))
+
+        echo "ritm=$ritm" >> $env:GITHUB_OUTPUT
+        echo "description_b64=$encoded" >> $env:GITHUB_OUTPUT
+        echo "cat_item_name=$cat_item_name" >> $env:GITHUB_OUTPUT
+
+    # -------------------------------------------------------------
+    # 2. Get sys_id of RITM
+    # -------------------------------------------------------------
+    - name: Get sys_id of RITM
+      id: get_sysid
+      if: ${{ steps.get_snow.outputs.ritm != '' }}
+      shell: pwsh
+      env:
+        SNOW_USER: ${{ secrets.SNOW_USER }}
+        SNOW_PASS: ${{ secrets.SNOW_PASS }}
+        RITM: ${{ steps.get_snow.outputs.ritm }}
+      run: |
+        Write-Host "Fetching sys_id for RITM $env:RITM"
+
+        $url = "https://ven04628.service-now.com/api/now/table/sc_req_item?sysparm_query=number=$($env:RITM)&sysparm_fields=sys_id"
+
+        $cred = New-Object System.Management.Automation.PSCredential(
+          $env:SNOW_USER,
+          (ConvertTo-SecureString $env:SNOW_PASS -AsPlainText -Force)
+        )
+
+        $response = Invoke-RestMethod -Uri $url -Credential $cred -Headers @{Accept="application/json"}
+
+        echo "sys_id=$($response.result[0].sys_id)" >> $env:GITHUB_OUTPUT
+
+    # -------------------------------------------------------------
+    # 3. Update RITM → In Progress
+    # -------------------------------------------------------------
+    - name: Update RITM → In Progress (state = 2)
+      if: ${{ steps.get_sysid.outputs.sys_id != '' }}
+      shell: pwsh
+      env:
+        SNOW_USER: ${{ secrets.SNOW_USER }}
+        SNOW_PASS: ${{ secrets.SNOW_PASS }}
+        SYS_ID: ${{ steps.get_sysid.outputs.sys_id }}
+      run: |
+        Write-Host "Updating RITM to In Progress..."
+        $url = "https://ven04628.service-now.com/api/now/table/sc_req_item/$($env:SYS_ID)"
+        $body = '{"state":"2"}'
+        $cred = New-Object System.Management.Automation.PSCredential($env:SNOW_USER,(ConvertTo-SecureString $env:SNOW_PASS -AsPlainText -Force))
+        Invoke-RestMethod -Method Patch -Uri $url -Credential $cred -Headers @{ "Content-Type"="application/json" } -Body $body
+
+    # -------------------------------------------------------------
+    # 4. Detect License Request Type (Add / Remove)
+    # -------------------------------------------------------------
+    - name: Detect License Request Type
+      id: detect_type
+      shell: pwsh
+      env:
+        DESCRIPTION_B64: ${{ steps.get_snow.outputs.description_b64 }}
+      run: |
+        $decoded = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($env:DESCRIPTION_B64))
+
+        if ($decoded -match "(?i)add license") {
+            echo "type=LicenseManagement_Add" >> $env:GITHUB_OUTPUT
+        }
+        elseif ($decoded -match "(?i)remove license") {
+            echo "type=LicenseManagement_Remove" >> $env:GITHUB_OUTPUT
+        }
+        else {
+            echo "type=LicenseManagement" >> $env:GITHUB_OUTPUT
+        }
+
+    # -------------------------------------------------------------
+    # 5. Parse License Management Description
+    # -------------------------------------------------------------
+    - name: Parse SNOW Description
+      id: parse_license
+      if: ${{ steps.detect_type.outputs.type != 'LicenseManagement' }}
+      shell: pwsh
+      env:
+        DESCRIPTION_B64: ${{ steps.get_snow.outputs.description_b64 }}
+      run: |
+        $decoded = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($env:DESCRIPTION_B64))
+        Write-Host "Decoded description:`n$decoded"
+
+        $lines = $decoded -split "`n"
+        $ActionType        = ($lines[0] -replace 'Request Type\s*:\s*','').Trim()
+        $UserPrincipalName = ($lines[1] -replace 'UserPrincipalName\s*:\s*','').Trim()
+        $LicenseName       = ($lines[2] -replace 'License Name\s*:\s*','').Trim()
+
+        echo "ActionType=$ActionType" >> $env:GITHUB_OUTPUT
+        echo "UserPrincipalName=$UserPrincipalName" >> $env:GITHUB_OUTPUT
+        echo "LicenseName=$LicenseName" >> $env:GITHUB_OUTPUT
+
+    # -------------------------------------------------------------
+    # 6. Map License Name to SKU
+    # -------------------------------------------------------------
+    - name: Map License Name to SKU ID
+      id: adjust_license
+      if: ${{ steps.detect_type.outputs.type != 'LicenseManagement' }}
+      shell: pwsh
+      env:
+        LICENSE_NAME: ${{ steps.parse_license.outputs.LicenseName }}
+      run: |
+        $LicenseSku = $env:LICENSE_NAME
+        if ($LicenseSku -eq "Microsoft 365 Business Standard") {
+            $LicenseSku = "f245ecc8-75af-4f8e-b61f-27d8114de5f3"
+            Write-Host "LicenseName mapped to SKU ID: $LicenseSku"
+        }
+        echo "LicenseSku=$LicenseSku" >> $env:GITHUB_OUTPUT
+
+    # -------------------------------------------------------------
+    # 7. Trigger License Workflow
+    # -------------------------------------------------------------
+    - name: Trigger O365 License Workflow
+      if: ${{ steps.detect_type.outputs.type != 'LicenseManagement' }}
+      uses: peter-evans/repository-dispatch@v2
+      with:
+        token: ${{ secrets.REPO_PAT }}
+        repository: ${{ github.repository }}
+        event-type: LicenseManagement
+        client-payload: |
+          {
+            "category": "LicenseManagement",
+            "ActionType": "${{ steps.parse_license.outputs.ActionType }}",
+            "UserPrincipalName": "${{ steps.parse_license.outputs.UserPrincipalName }}",
+            "LicenseName": "${{ steps.adjust_license.outputs.LicenseSku }}",
+            "sys_id": "${{ steps.get_sysid.outputs.sys_id }}"
+          }
