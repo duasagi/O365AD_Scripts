@@ -16,21 +16,27 @@ jobs:
     steps:
 
       # -------------------------------------------------
-      # 1. Debug: Print Client Payload
+      # 1.1 Debug: Print Client Payload
       # -------------------------------------------------
       - name: Print Client Payload
         shell: pwsh
         run: |
+          $category = "${{ github.event.client_payload.category }}"
+          $actionType = "${{ github.event.client_payload.ActionType }}"
+          $upn = "${{ github.event.client_payload.UserPrincipalName }}"
+          $licenseName = "${{ github.event.client_payload.LicenseName }}"
+          $sysId = "${{ github.event.client_payload.sys_id }}"
+
           Write-Host "===== CLIENT PAYLOAD ====="
-          Write-Host "Category: ${{ github.event.client_payload.category }}"
-          Write-Host "ActionType: ${{ github.event.client_payload.ActionType }}"
-          Write-Host "UserPrincipalName: ${{ github.event.client_payload.UserPrincipalName }}"
-          Write-Host "LicenseName: ${{ github.event.client_payload.LicenseName }}"
-          Write-Host "sys_id: ${{ github.event.client_payload.sys_id }}"
+          Write-Host "Category: $category"
+          Write-Host "ActionType: $actionType"
+          Write-Host "UserPrincipalName: $upn"
+          Write-Host "LicenseName: $licenseName"
+          Write-Host "sys_id: $sysId"
           Write-Host "=========================="
 
       # -------------------------------------------------
-      # 2. Checkout Branch
+      # 2. Checkout repository
       # -------------------------------------------------
       - name: Checkout O365_Automations Branch
         uses: actions/checkout@v4
@@ -46,19 +52,14 @@ jobs:
           TENANT_ID_COE: ${{ secrets.AZ_TENANT_ID_AutoCoe }}
           CLIENT_ID_COE: ${{ secrets.AZ_CLIENT_ID_AutoCoe }}
           CLIENT_SECRET_COE: ${{ secrets.AZ_SECRET_AutoCoe }}
+          VALID_DOMAIN: ${{ secrets.VALID_DOMAIN }}
         shell: pwsh
         run: |
           $action = "${{ github.event.client_payload.ActionType }}"
           $upn = "${{ github.event.client_payload.UserPrincipalName }}"
           $sku = "${{ github.event.client_payload.LicenseName }}"
 
-          Write-Host "===== DEBUG: INPUT VALUES ====="
-          Write-Host "ActionType = $action"
-          Write-Host "UPN = $upn"
-          Write-Host "LicenseSku = $sku"
-          Write-Host "================================"
-
-          # Run the script
+          # Run the script and capture output
           $result = & ./Scripts/LicenseManagement/LicenseManagement.ps1 `
             -TenantId $env:TENANT_ID_COE `
             -ClientId $env:CLIENT_ID_COE `
@@ -67,25 +68,15 @@ jobs:
             -LicenseSkuId $sku `
             -ActionType $action 2>&1 | Out-String
 
-          Write-Host "===== DEBUG: RAW SCRIPT OUTPUT ====="
-          Write-Host $result
-          Write-Host "===================================="
-
+          # Fallback for no output
           if (-not $result) {
             $result = "WORKNOTES:: Script returned no output.`nERRORFLAG:: True"
-            Write-Host "DEBUG: Script returned no output — fallback values applied."
           }
 
-          # Extract clean values
+          # Extract clean outputs
           $worknotes = ($result | Select-String "WORKNOTES::").ToString().Replace("WORKNOTES::","").Trim()
           $errorflag = ($result | Select-String "ERRORFLAG::").ToString().Replace("ERRORFLAG::","").Trim()
 
-          Write-Host "===== DEBUG: PARSED OUTPUT ====="
-          Write-Host "WORKNOTES → '$worknotes'"
-          Write-Host "ERRORFLAG → '$errorflag'"
-          Write-Host "================================="
-
-          # Send to GitHub output
           echo "worknotes=$worknotes" >> $env:GITHUB_OUTPUT
           echo "errorflag=$errorflag" >> $env:GITHUB_OUTPUT
 
@@ -102,47 +93,44 @@ jobs:
           WORKNOTES: ${{ steps.run_license.outputs.worknotes }}
           ERRORFLAG: ${{ steps.run_license.outputs.errorflag }}
         run: |
-          Write-Host "===== DEBUG: SNOW UPDATE VALUES ====="
-          Write-Host "WORKNOTES = '$($env:WORKNOTES)'"
-          Write-Host "ERRORFLAG = '$($env:ERRORFLAG)'"
-          Write-Host "SYS_ID = '$($env:SYS_ID)'"
-          Write-Host "====================================="
+          Write-Host "DEBUG → WORKNOTES = '$($env:WORKNOTES)'"
+          Write-Host "DEBUG → ERRORFLAG = '$($env:ERRORFLAG)'"
 
-          $state = "3"
+          $state = "3"  # Closed
           $assigned_to = $null
 
-          if ($env:ERRORFLAG -eq "True" -or
-              $env:WORKNOTES -like "*already exists*" -or
-              $env:WORKNOTES -like "*not found*" -or
-              $env:WORKNOTES -like "*Unknown action*") {
-
-              Write-Host "DEBUG: Error detected → Setting RITM to Pending (-5)"
-              $state = "-5"
-              $assigned_to = "cc152f591bbaf5109b7d32231b4bcbc1"
+          if (
+            $env:ERRORFLAG -eq "True" -or
+            $env:WORKNOTES -like "*already exists*" -or
+            $env:WORKNOTES -like "*not found*" -or
+            $env:WORKNOTES -like "*Unknown action*"
+          ) {
+            Write-Host "Setting RITM state to Pending (-5) due to error or existing license."
+            $state = "-5"
+            $assigned_to = "cc152f591bbaf5109b7d32231b4bcbc1"
           }
 
+          # Build JSON body
           $bodyHash = @{
-              state = $state
-              work_notes = $env:WORKNOTES
+            state      = $state
+            work_notes = $env:WORKNOTES
           }
+
           if ($assigned_to) {
-              $bodyHash["assigned_to"] = $assigned_to
+            $bodyHash["assigned_to"] = $assigned_to
           }
 
           $body = $bodyHash | ConvertTo-Json
-          Write-Host "===== DEBUG: SNOW PATCH BODY ====="
-          Write-Host $body
-          Write-Host "=================================="
 
           $cred = New-Object System.Management.Automation.PSCredential(
-              $env:SNOW_USER,
-              (ConvertTo-SecureString $env:SNOW_PASS -AsPlainText -Force)
+            $env:SNOW_USER,
+            (ConvertTo-SecureString $env:SNOW_PASS -AsPlainText -Force)
           )
 
           Invoke-RestMethod -Method Patch `
-              -Uri "https://ven04628.service-now.com/api/now/table/sc_req_item/$($env:SYS_ID)" `
-              -Credential $cred `
-              -Headers @{ "Content-Type"="application/json" } `
-              -Body $body
+            -Uri "https://ven04628.service-now.com/api/now/table/sc_req_item/$($env:SYS_ID)" `
+            -Credential $cred `
+            -Headers @{ "Content-Type"="application/json" } `
+            -Body $body
 
-          Write-Host "DEBUG: ServiceNow RITM updated successfully → State: $state"
+          Write-Host "ServiceNow RITM updated successfully → State: $state"
