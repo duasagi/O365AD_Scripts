@@ -70,13 +70,13 @@ jobs:
           # Fallback for empty result
           if (-not $result) { $result = "WORKNOTES:: Script returned no output.`nERRORFLAG:: True" }
 
-          
-          $worknotes = ($result | Select-String "WORKNOTES::").ToString().Replace("WORKNOTES::","").Trim()
-          $errorflag = ($result | Select-String "ERRORFLAG::").ToString().Replace("ERRORFLAG::","").Trim()
-      
-          echo "worknotes=$worknotes" >> $env:GITHUB_OUTPUT
-          echo "errorflag=$errorflag" >> $env:GITHUB_OUTPUT
+          $worknotes = ($result | Select-String "WORKNOTES::").ForEach{ $_.ToString().Replace("WORKNOTES::","").Trim() } -join " "
+          $errorflag = ($result | Select-String "ERRORFLAG::").ForEach{ $_.ToString().Replace("ERRORFLAG::","").Trim() } -join " "
 
+          # Write to GitHub Output safely
+          Add-Content -Path $env:GITHUB_OUTPUT -Value "worknotes=$worknotes"
+          Add-Content -Path $env:GITHUB_OUTPUT -Value "errorflag=$errorflag"
+         
 
      
       # 4. Update RITM in ServiceNow
