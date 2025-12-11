@@ -75,7 +75,6 @@ jobs:
 
           Write-Host "worknotes=$worknotes" >> $env:GITHUB_OUTPUT
           Write-Host "errorflag=$errorflag" >> $env:GITHUB_OUTPUT
-
      
       # 4. Update RITM in ServiceNow
       # -------------------------------------------------
