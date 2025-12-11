@@ -128,7 +128,7 @@ jobs:
           }
 
           if ($assigned_to) {
-            $bodyHash["assigned_to"] = $assigned_to
+            $bodyHash["assignment_group"] = $assignment_group
           }
 
           $body = $bodyHash | ConvertTo-Json
