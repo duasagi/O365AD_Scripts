@@ -72,9 +72,9 @@ jobs:
           if (-not $result) { 
             $result = "WORKNOTES:: Script returned no output.`nERRORFLAG:: True" 
           }
-
-          $worknotes = ($result | Select-String "WORKNOTES::") | ForEach-Object { $_.ToString().Replace("WORKNOTES::","").Trim() }
-          $errorflag = ($result | Select-String "ERRORFLAG::") | ForEach-Object { $_.ToString().Replace("ERRORFLAG::","").Trim() }
+        
+          $worknotes = ($result | Select-String "WORKNOTES::").ToString().Split("::")[1].Trim()
+          $errorflag = ($result | Select-String "ERRORFLAG::").ToString().Split("::")[1].Trim()
 
           echo "worknotes=$worknotes" >> $env:GITHUB_OUTPUT
           echo "errorflag=$errorflag" >> $env:GITHUB_OUTPUT
