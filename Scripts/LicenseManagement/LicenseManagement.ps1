@@ -474,6 +474,7 @@ function Set-Result {
     # EXACT OUTPUT FORMAT REQUIRED BY AUTOMATION SYSTEM
     Write-Output "WORKNOTES::$global:WorkNotesMessage"
     Write-Output "ERRORFLAG::$($global:ErrorFlag)"
+    
 
     if ($IsError) { exit 1 } else { exit 0 }
 }
