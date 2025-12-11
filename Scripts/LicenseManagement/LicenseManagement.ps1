@@ -313,11 +313,10 @@ function Set-Result {
     $global:WorkNotesMessage = $Message
     $global:ErrorFlag = $IsError
 
-    Write-Output "WORKNOTES=$global:WorkNotesMessage"
-    Write-Output "ERRORFLAG=$($global:ErrorFlag)"
+    Write-Output "WORKNOTES::$global:WorkNotesMessage"
+    Write-Output "ERRORFLAG::$($global:ErrorFlag)"
     exit
 }
-
 
 # Normalize Action
 $ActionType = $ActionType.ToLower().Trim()
@@ -445,4 +444,3 @@ try {
 catch {
     Set-Result -Message "Failed to process license operation: $($_.Exception.Message)" -IsError $true
 }
-
