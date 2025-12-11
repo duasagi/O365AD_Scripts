@@ -73,12 +73,26 @@ jobs:
             $result = "WORKNOTES:: Script returned no output.`nERRORFLAG:: True"
           }
 
-          # Extract clean outputs
-          $worknotes = ($result | Select-String "WORKNOTES::").ToString().Replace("WORKNOTES::","").Trim()
-          $errorflag = ($result | Select-String "ERRORFLAG::").ToString().Replace("ERRORFLAG::","").Trim()
+          # Extract clean outputs (safe)
+          $worknotes = ""
+          $errorflag = ""
 
-          echo "worknotes=$worknotes" >> $env:GITHUB_OUTPUT
-          echo "errorflag=$errorflag" >> $env:GITHUB_OUTPUT
+          foreach ($line in $result -split "`n") {
+              if ($line -match "^WORKNOTES::") {
+                  $worknotes = $line.Replace("WORKNOTES::","").Trim()
+              }
+              elseif ($line -match "^ERRORFLAG::") {
+                  $errorflag = $line.Replace("ERRORFLAG::","").Trim()
+              }
+          }
+
+          # Fallback values
+          if (-not $worknotes) { $worknotes = "No worknotes returned." }
+          if (-not $errorflag) { $errorflag = "True" }
+
+          # Send clean output to GitHub Actions
+          "worknotes=$worknotes" >> $env:GITHUB_OUTPUT
+          "errorflag=$errorflag" >> $env:GITHUB_OUTPUT
 
       # -------------------------------------------------
       # 4. Update RITM in ServiceNow
@@ -103,34 +117,4 @@ jobs:
             $env:ERRORFLAG -eq "True" -or
             $env:WORKNOTES -like "*already exists*" -or
             $env:WORKNOTES -like "*not found*" -or
-            $env:WORKNOTES -like "*Unknown action*"
-          ) {
-            Write-Host "Setting RITM state to Pending (-5) due to error or existing license."
-            $state = "-5"
-            $assigned_to = "cc152f591bbaf5109b7d32231b4bcbc1"
-          }
-
-          # Build JSON body
-          $bodyHash = @{
-            state      = $state
-            work_notes = $env:WORKNOTES
-          }
-
-          if ($assigned_to) {
-            $bodyHash["assigned_to"] = $assigned_to
-          }
-
-          $body = $bodyHash | ConvertTo-Json
-
-          $cred = New-Object System.Management.Automation.PSCredential(
-            $env:SNOW_USER,
-            (ConvertTo-SecureString $env:SNOW_PASS -AsPlainText -Force)
-          )
-
-          Invoke-RestMethod -Method Patch `
-            -Uri "https://ven04628.service-now.com/api/now/table/sc_req_item/$($env:SYS_ID)" `
-            -Credential $cred `
-            -Headers @{ "Content-Type"="application/json" } `
-            -Body $body
-
-          Write-Host "ServiceNow RITM updated successfully → State: $state"
+            $env:WORK
