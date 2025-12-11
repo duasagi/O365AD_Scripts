@@ -127,7 +127,7 @@ jobs:
             work_notes = $env:WORKNOTES
           }
 
-          if ($assigned_to) {
+          if ($assignment_group) {
             $bodyHash["assignment_group"] = $assignment_group
           }
 
