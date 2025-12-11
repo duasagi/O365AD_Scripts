@@ -59,7 +59,7 @@ jobs:
           $upn = "${{ github.event.client_payload.UserPrincipalName }}"
           $sku = "${{ github.event.client_payload.LicenseName }}"
 
-          # Always capture output as string
+          # Run the script and capture output
           $result = & ./Scripts/LicenseManagement/LicenseManagement.ps1 `
             -TenantId $env:TENANT_ID_COE `
             -ClientId $env:CLIENT_ID_COE `
@@ -68,17 +68,17 @@ jobs:
             -LicenseSkuId $sku `
             -ActionType $action 2>&1 | Out-String
 
-          # Fallback for empty result
-          if (-not $result) { 
-            $result = "WORKNOTES:: Script returned no output.`nERRORFLAG:: True" 
+          # Fallback for no output
+          if (-not $result) {
+            $result = "WORKNOTES:: Script returned no output.`nERRORFLAG:: True"
           }
-        
+
+          # Extract clean outputs
           $worknotes = ($result | Select-String "WORKNOTES::").ToString().Split("::")[1].Trim()
           $errorflag = ($result | Select-String "ERRORFLAG::").ToString().Split("::")[1].Trim()
 
           echo "worknotes=$worknotes" >> $env:GITHUB_OUTPUT
           echo "errorflag=$errorflag" >> $env:GITHUB_OUTPUT
-
 
       # -------------------------------------------------
       # 4. Update RITM in ServiceNow
