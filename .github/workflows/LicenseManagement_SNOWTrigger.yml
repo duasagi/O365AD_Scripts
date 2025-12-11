@@ -118,7 +118,7 @@ jobs:
           ) {
             Write-Host "Setting RITM state to Pending (-5) due to error or existing license."
             $state = "-5"
-            $assigned_to = "cc152f591bbaf5109b7d32231b4bcbc1"
+            $assigned_to = "d625dccec0a8016700a222a0f7900d06"
           }
 
           # Build JSON body
