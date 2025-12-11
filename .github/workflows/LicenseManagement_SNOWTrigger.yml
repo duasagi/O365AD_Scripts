@@ -94,7 +94,59 @@ jobs:
           "worknotes=$worknotes" >> $env:GITHUB_OUTPUT
           "errorflag=$errorflag" >> $env:GITHUB_OUTPUT
 
-      # -------------------------------------------------
+      # # -------------------------------------------------
+      # # 4. Update RITM in ServiceNow
+      # # -------------------------------------------------
+      # - name: Update RITM in ServiceNow
+      #   if: ${{ github.event.client_payload.sys_id != '' }}
+      #   shell: pwsh
+      #   env:
+      #     SNOW_USER: ${{ secrets.SNOW_USER }}
+      #     SNOW_PASS: ${{ secrets.SNOW_PASS }}
+      #     SYS_ID: ${{ github.event.client_payload.sys_id }}
+      #     WORKNOTES: ${{ steps.run_license.outputs.worknotes }}
+      #     ERRORFLAG: ${{ steps.run_license.outputs.errorflag }}
+      #   run: |
+      #     Write-Host "DEBUG → WORKNOTES = '$($env:WORKNOTES)'"
+      #     Write-Host "DEBUG → ERRORFLAG = '$($env:ERRORFLAG)'"
+
+      #     $state = "3"  # Closed
+      #     $assigned_to = $null
+
+      #     if (
+      #       $env:ERRORFLAG -eq "False"
+      #     ) {
+      #       Write-Host "Setting RITM state to Pending (-5) due to error or existing license."
+      #       $state = "-5"
+      #       $assignment_group = "d625dccec0a8016700a222a0f7900d06"
+      #     }
+
+      #     # Build JSON body
+      #     $bodyHash = @{
+      #       state      = $state
+      #       work_notes = $env:WORKNOTES
+      #     }
+
+      #     if ($assignment_group) {
+      #       $bodyHash["assignment_group"] = $assignment_group
+      #     }
+
+      #     $body = $bodyHash | ConvertTo-Json
+
+      #     $cred = New-Object System.Management.Automation.PSCredential(
+      #       $env:SNOW_USER,
+      #       (ConvertTo-SecureString $env:SNOW_PASS -AsPlainText -Force)
+      #     )
+
+      #     Invoke-RestMethod -Method Patch `
+      #       -Uri "https://ven04628.service-now.com/api/now/table/sc_req_item/$($env:SYS_ID)" `
+      #       -Credential $cred `
+      #       -Headers @{ "Content-Type"="application/json" } `
+      #       -Body $body
+
+      #     Write-Host "ServiceNow RITM updated successfully → State: $state"
+
+            # -------------------------------------------------
       # 4. Update RITM in ServiceNow
       # -------------------------------------------------
       - name: Update RITM in ServiceNow
@@ -110,14 +162,19 @@ jobs:
           Write-Host "DEBUG → WORKNOTES = '$($env:WORKNOTES)'"
           Write-Host "DEBUG → ERRORFLAG = '$($env:ERRORFLAG)'"
 
-          $state = "3"  # Closed
-          $assigned_to = $null
+          $state = "3"      # Default = Closed
+          $assigned_to = "" # Clear assigned_to by default
+          $assignment_group = $null
 
-          if (
-            $env:ERRORFLAG -eq "False"
-          ) {
-            Write-Host "Setting RITM state to Pending (-5) due to error or existing license."
+          # If ERRORFLAG = False → error happened → set Pending
+          if ($env:ERRORFLAG -eq "False") {
+            Write-Host "Setting RITM state to Pending (-5) due to error or license issue."
             $state = "-5"
+
+            # As per your requirement:
+            # assigned_to = empty
+            # assignment_group = d625dccec0a8016700a222a0f7900d06
+            $assigned_to = ""
             $assignment_group = "d625dccec0a8016700a222a0f7900d06"
           }
 
@@ -127,8 +184,14 @@ jobs:
             work_notes = $env:WORKNOTES
           }
 
+          # Include assignment_group only if state is -5
           if ($assignment_group) {
             $bodyHash["assignment_group"] = $assignment_group
+          }
+
+          # assigned_to must be empty if state = -5
+          if ($state -eq "-5") {
+            $bodyHash["assigned_to"] = ""
           }
 
           $body = $bodyHash | ConvertTo-Json
