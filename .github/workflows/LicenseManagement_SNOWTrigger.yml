@@ -14,6 +14,7 @@ jobs:
     runs-on: windows-latest
 
     steps:
+
       # -------------------------------------------------
       # 1.1 Debug: Print Client Payload
       # -------------------------------------------------
@@ -68,110 +69,68 @@ jobs:
             -ActionType $action 2>&1 | Out-String
 
           # Fallback for empty result
-          if (-not $result) { $result = "WORKNOTES:: Script returned no output.`nERRORFLAG:: True" }
+          if (-not $result) { 
+            $result = "WORKNOTES:: Script returned no output.`nERRORFLAG:: True" 
+          }
 
           $worknotes = ($result | Select-String "WORKNOTES::") | ForEach-Object { $_.ToString().Replace("WORKNOTES::","").Trim() }
           $errorflag = ($result | Select-String "ERRORFLAG::") | ForEach-Object { $_.ToString().Replace("ERRORFLAG::","").Trim() }
 
-          Write-Host "worknotes=$worknotes" >> $env:GITHUB_OUTPUT
-          Write-Host "errorflag=$errorflag" >> $env:GITHUB_OUTPUT         
+          echo "worknotes=$worknotes" >> $env:GITHUB_OUTPUT
+          echo "errorflag=$errorflag" >> $env:GITHUB_OUTPUT
 
 
-      
-     
-      # # 4. Update RITM in ServiceNow
-      # # -------------------------------------------------
-      # - name: Update RITM in ServiceNow
-      #   if: ${{ github.event.client_payload.sys_id != '' }}
-      #   shell: pwsh
-      #   env:
-      #     SNOW_USER: ${{ secrets.SNOW_USER }}
-      #     SNOW_PASS: ${{ secrets.SNOW_PASS }}
-      #     SYS_ID: ${{ github.event.client_payload.sys_id }}
-      #     WORKNOTES: ${{ steps.run_license.outputs.worknotes }}
-      #     ERRORFLAG: ${{ steps.run_license.outputs.errorflag }}
-      #   run: |
-      #     $state = "3" # default Closed
-      #     $assigned_to = $null
-
-      #     if ($env:ERRORFLAG -eq "True" -or $env:WORKNOTES -like "*already exists*" -or $env:WORKNOTES -like "*not found*" -or $env:WORKNOTES -like "*Unknown action*") {
-      #         Write-Host "Setting RITM state to Pending (-5) due to error or existing license."
-      #         $state = "-5" # Pending
-      #         $assigned_to = "cc152f591bbaf5109b7d32231b4bcbc1"
-      #     }
-
-      #     # Build JSON body
-      #     $bodyHash = @{
-      #         state = $state
-      #         work_notes = $env:WORKNOTES
-      #     }
-
-      #     if ($assigned_to) {
-      #         $bodyHash["assigned_to"] = $assigned_to
-      #     }
-
-      #     $body = $bodyHash | ConvertTo-Json
-
-      #     $cred = New-Object System.Management.Automation.PSCredential(
-      #         $env:SNOW_USER,
-      #         (ConvertTo-SecureString $env:SNOW_PASS -AsPlainText -Force)
-      #     )
-
-      #     Invoke-RestMethod -Method Patch `
-      #         -Uri "https://ven04628.service-now.com/api/now/table/sc_req_item/$($env:SYS_ID)" `
-      #         -Credential $cred `
-      #         -Headers @{ "Content-Type"="application/json" } `
-      #         -Body $body
-
-
+      # -------------------------------------------------
       # 4. Update RITM in ServiceNow
-- name: Update RITM in ServiceNow
-  if: ${{ github.event.client_payload.sys_id != '' }}
-  shell: pwsh
-  env:
-    SNOW_USER: ${{ secrets.SNOW_USER }}
-    SNOW_PASS: ${{ secrets.SNOW_PASS }}
-    SYS_ID: ${{ github.event.client_payload.sys_id }}
-    WORKNOTES: ${{ steps.run_license.outputs.worknotes }}
-    ERRORFLAG: ${{ steps.run_license.outputs.errorflag }}
-  run: |
-    # Debug print
-    Write-Host "DEBUG → WORKNOTES = '$($env:WORKNOTES)'"
-    Write-Host "DEBUG → ERRORFLAG = '$($env:ERRORFLAG)'"
+      # -------------------------------------------------
+      - name: Update RITM in ServiceNow
+        if: ${{ github.event.client_payload.sys_id != '' }}
+        shell: pwsh
+        env:
+          SNOW_USER: ${{ secrets.SNOW_USER }}
+          SNOW_PASS: ${{ secrets.SNOW_PASS }}
+          SYS_ID: ${{ github.event.client_payload.sys_id }}
+          WORKNOTES: ${{ steps.run_license.outputs.worknotes }}
+          ERRORFLAG: ${{ steps.run_license.outputs.errorflag }}
+        run: |
+          # Debug print
+          Write-Host "DEBUG → WORKNOTES = '$($env:WORKNOTES)'"
+          Write-Host "DEBUG → ERRORFLAG = '$($env:ERRORFLAG)'"
 
-    $state = "3" # default Closed
-    $assigned_to = $null
+          $state = "3" # default Closed
+          $assigned_to = $null
 
-    if ($env:ERRORFLAG -eq "True" -or $env:WORKNOTES -like "*already exists*" -or $env:WORKNOTES -like "*not found*" -or $env:WORKNOTES -like "*Unknown action*") {
-        Write-Host "Setting RITM state to Pending (-5) due to error or existing license."
-        $state = "-5" # Pending
-        $assigned_to = "cc152f591bbaf5109b7d32231b4bcbc1"
-    }
+          if ($env:ERRORFLAG -eq "True" -or 
+              $env:WORKNOTES -like "*already exists*" -or 
+              $env:WORKNOTES -like "*not found*" -or 
+              $env:WORKNOTES -like "*Unknown action*") {
 
-    # Build JSON body
-    $bodyHash = @{
-        state = $state
-        work_notes = $env:WORKNOTES
-    }
+              Write-Host "Setting RITM state to Pending (-5) due to error or existing license."
+              $state = "-5"
+              $assigned_to = "cc152f591bbaf5109b7d32231b4bcbc1"
+          }
 
-    if ($assigned_to) {
-        $bodyHash["assigned_to"] = $assigned_to
-    }
+          # Build JSON body
+          $bodyHash = @{
+              state = $state
+              work_notes = $env:WORKNOTES
+          }
 
-    $body = $bodyHash | ConvertTo-Json
+          if ($assigned_to) {
+              $bodyHash["assigned_to"] = $assigned_to
+          }
 
-    $cred = New-Object System.Management.Automation.PSCredential(
-        $env:SNOW_USER,
-        (ConvertTo-SecureString $env:SNOW_PASS -AsPlainText -Force)
-    )
+          $body = $bodyHash | ConvertTo-Json
 
-    Invoke-RestMethod -Method Patch `
-        -Uri "https://ven04628.service-now.com/api/now/table/sc_req_item/$($env:SYS_ID)" `
-        -Credential $cred `
-        -Headers @{ "Content-Type"="application/json" } `
-        -Body $body
+          $cred = New-Object System.Management.Automation.PSCredential(
+              $env:SNOW_USER,
+              (ConvertTo-SecureString $env:SNOW_PASS -AsPlainText -Force)
+          )
 
-    Write-Host "ServiceNow RITM updated successfully → State: $state"
+          Invoke-RestMethod -Method Patch `
+              -Uri "https://ven04628.service-now.com/api/now/table/sc_req_item/$($env:SYS_ID)" `
+              -Credential $cred `
+              -Headers @{ "Content-Type"="application/json" } `
+              -Body $body
 
-
-      #     Write-Host "ServiceNow RITM updated successfully → State: $state"
+          Write-Host "ServiceNow RITM updated successfully → State: $state"
