@@ -447,7 +447,6 @@ catch {
 }
 #>
 
-
 param(
     [string]$TenantId,
     [string]$ClientId,
@@ -457,7 +456,9 @@ param(
     [string]$ActionType
 )
 
-# Global vars
+# -----------------------------
+# GLOBAL VARIABLES
+# -----------------------------
 $global:WorkNotesMessage = ""
 $global:ErrorFlag = $false
 
@@ -467,32 +468,37 @@ function Set-Result {
         [bool]$IsError
     )
 
-    # Set globals for any downstream use
     $global:WorkNotesMessage = $Message
     $global:ErrorFlag = $IsError
 
-    # IMPORTANT: produce exactly these two lines for the caller to parse
-    Write-Output ("WORKNOTES::{0}" -f $global:WorkNotesMessage)
-    Write-Output ("ERRORFLAG::{0}" -f ($global:ErrorFlag -eq $true))
+    # EXACT OUTPUT FORMAT REQUIRED BY AUTOMATION SYSTEM
+    Write-Output "WORKNOTES::$global:WorkNotesMessage"
+    Write-Output "ERRORFLAG::$($global:ErrorFlag)"
 
-    # exit with 0/1 appropriate to success/error (optional, but useful)
     if ($IsError) { exit 1 } else { exit 0 }
 }
 
 # -----------------------------
-# Normalize ActionType (accept both "add" / "add license")
+# VALIDATE ACTION TYPE
 # -----------------------------
 if (-not $ActionType) {
-    Set-Result -Message "ActionType not provided" -IsError $true
+    Set-Result -Message "ActionType not provided." -IsError $true
 }
 
 $ActionType = $ActionType.ToLower().Trim()
-if ($ActionType -in @("add license","add"))     { $actionNormalized = "add" }
-elseif ($ActionType -in @("remove license","remove")) { $actionNormalized = "remove" }
-else { Set-Result -Message "Invalid ActionType. Use 'add' or 'remove' (or 'add license'/'remove license')." -IsError $true }
+
+switch ($ActionType) {
+    "add"            { $action = "add" }
+    "add license"    { $action = "add" }
+    "remove"         { $action = "remove" }
+    "remove license" { $action = "remove" }
+    default {
+        Set-Result -Message "Invalid ActionType. Use add/remove." -IsError $true
+    }
+}
 
 # -----------------------------
-# Validate UPN Format
+# VALIDATE USER PRINCIPAL NAME
 # -----------------------------
 $validDomain = $env:VALID_DOMAIN
 if ([string]::IsNullOrWhiteSpace($validDomain)) {
@@ -500,12 +506,13 @@ if ([string]::IsNullOrWhiteSpace($validDomain)) {
 }
 
 $escapedDomain = [Regex]::Escape($validDomain)
+
 if ($UserPrincipalName -notmatch "^[a-zA-Z0-9._-]+@$escapedDomain$") {
-    Set-Result -Message "Invalid UPN format for user." -IsError $true
+    Set-Result -Message "Invalid UPN format. Must end with @$validDomain" -IsError $true
 }
 
 # -----------------------------
-# Get Access Token
+# GET ACCESS TOKEN
 # -----------------------------
 try {
     $tokenResponse = Invoke-RestMethod -Method POST `
@@ -529,95 +536,100 @@ $headers = @{
 }
 
 # -----------------------------
-# Check User Exists
+# CHECK USER EXISTS
 # -----------------------------
 try {
-    $user = Invoke-RestMethod -Uri "https://graph.microsoft.com/v1.0/users/$UserPrincipalName" -Headers $headers -Method GET
+    $user = Invoke-RestMethod -Uri "https://graph.microsoft.com/v1.0/users/$UserPrincipalName" -Headers $headers
 }
 catch {
     Set-Result -Message "User not found: $UserPrincipalName" -IsError $true
 }
 
 # -----------------------------
-# Get Tenant SKUs
+# GET TENANT LICENSE SKUS
 # -----------------------------
 try {
-    $tenantLicenses = Invoke-RestMethod -Uri "https://graph.microsoft.com/v1.0/subscribedSkus" -Headers $headers -Method GET
+    $tenantSkus = Invoke-RestMethod -Uri "https://graph.microsoft.com/v1.0/subscribedSkus" -Headers $headers
 }
 catch {
-    Set-Result -Message "Failed to fetch subscribed SKUs: $($_.Exception.Message)" -IsError $true
+    Set-Result -Message "Failed to fetch tenant SKUs." -IsError $true
 }
 
-$sku = $tenantLicenses.value | Where-Object { $_.skuId -eq $LicenseSkuId }
+$sku = $tenantSkus.value | Where-Object { $_.skuId -eq $LicenseSkuId }
+
 if (-not $sku) {
     Set-Result -Message "License SKU not found in tenant." -IsError $true
 }
 
 # -----------------------------
-# Get License Details of User
+# GET USER LICENSE DETAILS
 # -----------------------------
 try {
-    $licenseDetails = Invoke-RestMethod -Uri "https://graph.microsoft.com/v1.0/users/$UserPrincipalName/licenseDetails" -Headers $headers -Method GET
+    $licenseInfo = Invoke-RestMethod -Uri "https://graph.microsoft.com/v1.0/users/$UserPrincipalName/licenseDetails" -Headers $headers
 }
 catch {
-    Set-Result -Message "Failed to fetch user license details: $($_.Exception.Message)" -IsError $true
+    Set-Result -Message "Failed to fetch user license details." -IsError $true
 }
 
-# collect assigned SKU GUIDs safely (some responses include multiple entries)
-$assignedSkuIds = @()
-if ($licenseDetails -and $licenseDetails.value) {
-    $assignedSkuIds = $licenseDetails.value | ForEach-Object { $_.skuId } | Where-Object { $_ -ne $null }
+$assignedSkus = @()
+if ($licenseInfo.value) {
+    $assignedSkus = $licenseInfo.value.skuId
 }
 
 # -----------------------------
-# ADD license
+# ADD LICENSE
 # -----------------------------
-if ($actionNormalized -eq "add") {
+if ($action -eq "add") {
 
-    if ($assignedSkuIds -contains $LicenseSkuId) {
+    if ($assignedSkus -contains $LicenseSkuId) {
         Set-Result -Message "License already assigned to user." -IsError $false
     }
 
-    # check available units (prepaidUnits may be null on some tenants — handle safely)
-    $availableUnits = $null
-    try {
-        if ($sku.prepaidUnits -and $sku.consumedUnits -ne $null) {
-            $availableUnits = [int]$sku.prepaidUnits.enabled - [int]$sku.consumedUnits
-        }
-    } catch { $availableUnits = $null }
+    $available = $sku.prepaidUnits.enabled - $sku.consumedUnits
 
-    if ($availableUnits -ne $null -and $availableUnits -le 0) {
-        Set-Result -Message "No available license units for this SKU." -IsError $true
+    if ($available -le 0) {
+        Set-Result -Message "No available licenses left for this SKU." -IsError $true
     }
 
-    $bodyJson = @{
-        addLicenses    = @(@{ skuId = $LicenseSkuId })
-        removeLicenses = @()
-    } | ConvertTo-Json -Depth 4
+    $bodyJson = @"
+{
+  "addLicenses": [
+    { "skuId": "$LicenseSkuId" }
+  ],
+  "removeLicenses": []
+}
+"@
 }
 
 # -----------------------------
-# REMOVE license
+# REMOVE LICENSE
 # -----------------------------
-if ($actionNormalized -eq "remove") {
+if ($action -eq "remove") {
 
-    if (-not ($assignedSkuIds -contains $LicenseSkuId)) {
+    if ($assignedSkus -notcontains $LicenseSkuId) {
         Set-Result -Message "License not assigned to user. Nothing to remove." -IsError $false
     }
 
-    $bodyJson = @{
-        addLicenses    = @()
-        removeLicenses = @($LicenseSkuId)
-    } | ConvertTo-Json -Depth 4
+    $bodyJson = @"
+{
+  "addLicenses": [],
+  "removeLicenses": [ "$LicenseSkuId" ]
+}
+"@
 }
 
 # -----------------------------
-# Call AssignLicense API
+# PERFORM ASSIGN/REMOVE OPERATION
 # -----------------------------
 try {
-    Invoke-RestMethod -Uri "https://graph.microsoft.com/v1.0/users/$UserPrincipalName/assignLicense" -Headers $headers -Method POST -Body $bodyJson
-    Set-Result -Message ("License {0} completed successfully." -f $actionNormalized) -IsError $false
+    Invoke-RestMethod `
+        -Uri "https://graph.microsoft.com/v1.0/users/$UserPrincipalName/assignLicense" `
+        -Headers $headers `
+        -Method POST `
+        -Body $bodyJson
+
+    Set-Result -Message "License $action operation completed successfully." -IsError $false
 }
 catch {
-    Set-Result -Message ("Failed to process license operation: {0}" -f $_.Exception.Message) -IsError $true
+    Set-Result -Message "Failed to process license operation: $($_.Exception.Message)" -IsError $true
 }
