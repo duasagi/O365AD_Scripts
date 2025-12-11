@@ -74,9 +74,7 @@ jobs:
           $errorflag = ($result | Select-String "ERRORFLAG::") | ForEach-Object { $_.ToString().Replace("ERRORFLAG::","").Trim() }
 
 
-          #Write-Host "worknotes=$worknotes" >> $env:GITHUB_OUTPUT
-          #Write-Host "errorflag=$errorflag" >> $env:GITHUB_OUTPUT         
-
+      
      
       # 4. Update RITM in ServiceNow
       # -------------------------------------------------
