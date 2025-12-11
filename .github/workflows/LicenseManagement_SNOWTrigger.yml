@@ -114,10 +114,7 @@ jobs:
           $assigned_to = $null
 
           if (
-            $env:ERRORFLAG -eq "True" -or
-            $env:WORKNOTES -like "*already exists*" -or
-            $env:WORKNOTES -like "*not found*" -or
-            $env:WORKNOTES -like "*Unknown action*"
+            $env:ERRORFLAG -eq "False"
           ) {
             Write-Host "Setting RITM state to Pending (-5) due to error or existing license."
             $state = "-5"
