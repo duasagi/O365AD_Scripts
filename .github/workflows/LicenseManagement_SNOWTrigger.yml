@@ -74,9 +74,10 @@ jobs:
           }
 
           # Extract clean outputs
-          $worknotes = ($result | Select-String "WORKNOTES::").ToString().Split("::")[1].Trim()
-          $errorflag = ($result | Select-String "ERRORFLAG::").ToString().Split("::")[1].Trim()
+          $worknotes = ($result | Select-String "WORKNOTES::").ToString().Replace("WORKNOTES::","").Trim()
+          $errorflag = ($result | Select-String "ERRORFLAG::").ToString().Replace("ERRORFLAG::","").Trim()
 
+          
           echo "worknotes=$worknotes" >> $env:GITHUB_OUTPUT
           echo "errorflag=$errorflag" >> $env:GITHUB_OUTPUT
 
