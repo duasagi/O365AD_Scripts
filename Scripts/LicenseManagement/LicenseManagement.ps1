@@ -494,7 +494,7 @@ switch ($ActionType) {
     "remove"         { $action = "remove" }
     "remove license" { $action = "remove" }
     default {
-        Set-Result -Message "Invalid ActionType. Use add/remove." -IsError $true
+        Set-Result -Message "Invalid ActionType. Use add/remove." -IsError $false
     }
 }
 
@@ -503,13 +503,13 @@ switch ($ActionType) {
 # -----------------------------
 $validDomain = $env:VALID_DOMAIN
 if ([string]::IsNullOrWhiteSpace($validDomain)) {
-    Set-Result -Message "VALID_DOMAIN environment variable is not set." -IsError $true
+    Set-Result -Message "VALID_DOMAIN environment variable is not set." -IsError $false
 }
 
 $escapedDomain = [Regex]::Escape($validDomain)
 
 if ($UserPrincipalName -notmatch "^[a-zA-Z0-9._-]+@$escapedDomain$") {
-    Set-Result -Message "Invalid UPN format. Must end with @$validDomain" -IsError $true
+    Set-Result -Message "Invalid UPN format. Must end with @$validDomain" -IsError $false
 }
 
 # -----------------------------
@@ -528,7 +528,7 @@ try {
     $token = $tokenResponse.access_token
 }
 catch {
-    Set-Result -Message "Failed to get access token: $($_.Exception.Message)" -IsError $true
+    Set-Result -Message "Failed to get access token: $($_.Exception.Message)" -IsError $false
 }
 
 $headers = @{
@@ -553,13 +553,13 @@ try {
     $tenantSkus = Invoke-RestMethod -Uri "https://graph.microsoft.com/v1.0/subscribedSkus" -Headers $headers
 }
 catch {
-    Set-Result -Message "Failed to fetch tenant SKUs." -IsError $true
+    Set-Result -Message "Failed to fetch tenant SKUs." -IsError $false
 }
 
 $sku = $tenantSkus.value | Where-Object { $_.skuId -eq $LicenseSkuId }
 
 if (-not $sku) {
-    Set-Result -Message "License SKU not found in tenant." -IsError $true
+    Set-Result -Message "License SKU not found in tenant." -IsError $false
 }
 
 # -----------------------------
@@ -589,7 +589,7 @@ if ($action -eq "add") {
     $available = $sku.prepaidUnits.enabled - $sku.consumedUnits
 
     if ($available -le 0) {
-        Set-Result -Message "No available licenses left for this SKU." -IsError $true
+        Set-Result -Message "No available licenses left for this SKU." -IsError $false
     }
 
     $bodyJson = @"
@@ -629,8 +629,8 @@ try {
         -Method POST `
         -Body $bodyJson
 
-    Set-Result -Message "License $action operation completed successfully." -IsError $false
+    Set-Result -Message "License $action operation completed successfully." -IsError $true
 }
 catch {
-    Set-Result -Message "Failed to process license operation: $($_.Exception.Message)" -IsError $true
+    Set-Result -Message "Failed to process license operation: $($_.Exception.Message)" -IsError $false
 }
